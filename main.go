@@ -1,10 +1,8 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,50 +12,38 @@ import (
 
 const uploadsBase string = "./uploads/"
 
-func processList(s ssh.Session) error {
-	username := filepath.Base(s.User())
+var uploadsRoot *os.Root
 
-	dirPath := filepath.Join(uploadsBase, username)
-
-	dir, err := os.ReadDir(dirPath)
+func init() {
+	os.MkdirAll(uploadsBase, 0750)
+	root, err := os.OpenRoot(uploadsBase)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			fmt.Fprintln(s, "Create an account first loser!")
-			return nil
-		} else {
-			fmt.Fprintln(s, "Oopsie daisy")
-			return nil
-		}
+		panic(err)
 	}
-
-	for idx, entry := range dir {
-		fmt.Fprintf(s, "%d. %s\n", idx, entry.Name())
-	}
-
-	return nil
+	uploadsRoot = root
 }
 
 func processUpload(s ssh.Session, filename string) error {
-
 	username := filepath.Base(s.User())
-	filename = filepath.Base(filename)
+	userRoot, err := uploadsRoot.OpenRoot(username)
+    if err != nil {
+        // If not exists, create then reopen
+        if mkErr := uploadsRoot.Mkdir(username, 0750); mkErr != nil {
+            return mkErr
+        }
+        userRoot, err = uploadsRoot.OpenRoot(username)
+        if err != nil {
+            return err
+        }
+    }
+	defer userRoot.Close()
 
-	log.Println("Handling upload operation for", username, ". file: ", filename)
-
-	userDir := filepath.Join(uploadsBase, username)
-
-	err := os.MkdirAll(userDir, 0755)
+	fh, err := userRoot.Create(filename)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-
-	fp := filepath.Join(userDir, filename)
-	fh, err := os.Create(fp)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
+	defer fh.Close()
 
 	io.Copy(fh, s)
 
@@ -66,15 +52,19 @@ func processUpload(s ssh.Session, filename string) error {
 
 func processDownload(s ssh.Session, filename string) error {
 	username := filepath.Base(s.User())
-	filename = filepath.Base(filename)
-
-	fp := filepath.Join(uploadsBase, username, filename)
-
-	fh, err := os.Open(fp)
+	userRoot, err := uploadsRoot.OpenRoot(username)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
+	defer userRoot.Close()
+
+	fh, err := userRoot.Open(filename)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer fh.Close()
 
 	io.Copy(s, fh)
 
@@ -93,8 +83,6 @@ func main() {
 		case "d":
 			name := s.Command()[1]
 			err = processDownload(s, name)
-		case "l":
-			err = processList(s)
 		}
 		if err != nil {
 			fmt.Println(err)

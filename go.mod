@@ -1,4 +1,4 @@
-module ssh-clip
+module github.com/sivaplaysmC/ssh-clip
 
 go 1.24.6
 

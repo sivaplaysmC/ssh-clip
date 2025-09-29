@@ -26,16 +26,16 @@ func init() {
 func processUpload(s ssh.Session, filename string) error {
 	username := filepath.Base(s.User())
 	userRoot, err := uploadsRoot.OpenRoot(username)
-    if err != nil {
-        // If not exists, create then reopen
-        if mkErr := uploadsRoot.Mkdir(username, 0750); mkErr != nil {
-            return mkErr
-        }
-        userRoot, err = uploadsRoot.OpenRoot(username)
-        if err != nil {
-            return err
-        }
-    }
+	if err != nil {
+		// If not exists, create then reopen
+		if mkErr := uploadsRoot.Mkdir(username, 0750); mkErr != nil {
+			return mkErr
+		}
+		userRoot, err = uploadsRoot.OpenRoot(username)
+		if err != nil {
+			return err
+		}
+	}
 	defer userRoot.Close()
 
 	fh, err := userRoot.Create(filename)
@@ -73,6 +73,11 @@ func processDownload(s ssh.Session, filename string) error {
 
 func main() {
 	ssh.Handle(func(s ssh.Session) {
+
+		if len(s.Command()) < 2 {
+			fmt.Fprintf(s, "usage: ssh %s@%s -p 8080 <u|d> <filepath>\n", s.User(), s.RemoteAddr().String())
+		}
+
 		op := s.Command()[0]
 
 		var err error = nil

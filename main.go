@@ -97,6 +97,9 @@ func main() {
 
 	ssh_opts := []ssh.Option{
 		ssh.HostKeyFile("./server.key"),
+		ssh.PasswordAuth(func(ctx ssh.Context, password string) bool {
+			return false
+		}),
 	}
 
 	log.Fatal(ssh.ListenAndServe(":8080", nil, ssh_opts...))
